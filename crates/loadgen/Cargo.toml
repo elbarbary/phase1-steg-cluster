@@ -1,0 +1,19 @@
+[package]
+name = "loadgen"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "phase1-loadgen"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+reqwest.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+bytes.workspace = true
+
+[dev-dependencies]

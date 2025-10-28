@@ -1,0 +1,32 @@
+cluster_name: "phase1"
+nodes:
+  - id: "n1"
+    ip: "10.0.0.11"
+    http_port: 8081
+    raft_port: 5001
+  - id: "n2"
+    ip: "10.0.0.12"
+    http_port: 8082
+    raft_port: 5002
+  - id: "n3"
+    ip: "10.0.0.13"
+    http_port: 8083
+    raft_port: 5003
+
+stego:
+  # LSB bits per color channel (1 = minimal visual change)
+  lsb_per_channel: 1
+  # Deflate-compress secret bytes before embedding
+  compress: true
+  # Max cover pixels (0 = unlimited)
+  max_pixels: 0
+
+gui:
+  # Cluster status polling interval (ms)
+  status_poll_ms: 1000
+
+loadgen:
+  # Request timeout (ms)
+  request_timeout_ms: 5000
+  # Max retry attempts per request
+  max_retries: 2

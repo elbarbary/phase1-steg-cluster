@@ -1,0 +1,68 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/common",
+    "crates/control-plane",
+    "crates/stego",
+    "crates/server",
+    "crates/loadgen",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Phase1 Team"]
+license = "MIT"
+
+[workspace.dependencies]
+# Async runtime & web framework
+tokio = { version = "1.40", features = ["full"] }
+axum = { version = "0.7", features = ["multipart", "macros"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["fs", "trace", "cors"] }
+hyper = { version = "1.4", features = ["full"] }
+bytes = "1.7"
+
+# Consensus
+openraft = { version = "0.9", features = ["serde"] }
+
+# Image processing & steganography
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+flate2 = "1.0"
+crc32fast = "1.4"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Metrics
+metrics = "0.23"
+metrics-exporter-prometheus = "0.15"
+
+# System info
+sysinfo = "0.31"
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Utilities
+uuid = { version = "1.10", features = ["v4", "serde"] }
+anyhow = "1.0"
+thiserror = "1.0"
+dashmap = "6.0"
+parking_lot = "0.12"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+base64 = "0.22"
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+
+# Testing
+tokio-test = "0.4"
+assert_cmd = "2.0"
+predicates = "3.1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

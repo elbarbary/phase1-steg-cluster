@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase-1 Steganography Cluster</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔐 Phase-1 Distributed Steganography System</h1>
+            <p class="subtitle">LSB Steganography with OpenRaft Consensus</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" data-tab="stego">Steganography</button>
+            <button class="tab-button" data-tab="cluster">Cluster Status</button>
+        </div>
+
+        <!-- Steganography Tab -->
+        <div id="stego-tab" class="tab-content active">
+            <div class="card">
+                <h2>Embed Secret</h2>
+                <div class="form-group">
+                    <label for="embed-file">Upload Secret Image:</label>
+                    <input type="file" id="embed-file" accept="image/*">
+                </div>
+                <button id="embed-btn" class="btn btn-primary">Embed</button>
+                
+                <div id="embed-result" class="result hidden">
+                    <h3>Results</h3>
+                    <div class="image-preview">
+                        <div class="preview-item">
+                            <h4>Original Secret</h4>
+                            <img id="original-preview" alt="Original">
+                            <p id="original-size"></p>
+                        </div>
+                        <div class="preview-item">
+                            <h4>Stego Image</h4>
+                            <img id="stego-preview" alt="Stego">
+                            <p id="stego-info"></p>
+                            <button id="download-stego" class="btn btn-sm">Download</button>
+                        </div>
+                    </div>
+                    <div class="metrics">
+                        <div class="metric">
+                            <span class="label">Request ID:</span>
+                            <span id="embed-request-id"></span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">Secret Size:</span>
+                            <span id="embed-secret-size"></span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">Capacity:</span>
+                            <span id="embed-capacity"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Extract Secret</h2>
+                <div class="form-group">
+                    <label for="extract-file">Upload Stego Image:</label>
+                    <input type="file" id="extract-file" accept="image/*">
+                </div>
+                <button id="extract-btn" class="btn btn-primary">Extract</button>
+                
+                <div id="extract-result" class="result hidden">
+                    <h3>Recovered Secret</h3>
+                    <div class="image-preview">
+                        <div class="preview-item">
+                            <img id="recovered-preview" alt="Recovered">
+                            <p id="recovered-info"></p>
+                            <button id="download-recovered" class="btn btn-sm">Download</button>
+                        </div>
+                    </div>
+                    <div class="metrics">
+                        <div class="metric">
+                            <span class="label">Request ID:</span>
+                            <span id="extract-request-id"></span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">Recovered Size:</span>
+                            <span id="extract-size"></span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">MIME Type:</span>
+                            <span id="extract-mime"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cluster Tab -->
+        <div id="cluster-tab" class="tab-content">
+            <div class="card">
+                <h2>Cluster Status</h2>
+                <div id="cluster-info">
+                    <div class="metric">
+                        <span class="label">Current Term:</span>
+                        <span id="cluster-term">0</span>
+                    </div>
+                    <div class="metric">
+                        <span class="label">Leader:</span>
+                        <span id="cluster-leader" class="badge">None</span>
+                    </div>
+                </div>
+
+                <table class="node-table">
+                    <thead>
+                        <tr>
+                            <th>Node ID</th>
+                            <th>Role</th>
+                            <th>Address</th>
+                            <th>CPU %</th>
+                            <th>Mem %</th>
+                            <th>QPS</th>
+                            <th>P95 (ms)</th>
+                            <th>Health</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="node-table-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>Stress Testing</h2>
+                <div class="stress-controls">
+                    <div class="form-group">
+                        <label for="num-clients">Number of Clients:</label>
+                        <input type="number" id="num-clients" value="20" min="1" max="1000">
+                    </div>
+                    <div class="form-group">
+                        <label for="reqs-per-client">Requests per Client:</label>
+                        <input type="number" id="reqs-per-client" value="200" min="1" max="10000">
+                    </div>
+                    <div class="form-group">
+                        <label for="operation">Operation:</label>
+                        <select id="operation">
+                            <option value="embed">Embed</option>
+                            <option value="extract">Extract</option>
+                        </select>
+                    </div>
+                    <button id="start-stress" class="btn btn-primary">Start Stress Test</button>
+                    <button id="stop-stress" class="btn btn-danger hidden">Stop</button>
+                </div>
+
+                <div id="stress-stats" class="hidden">
+                    <h3>Live Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-value" id="total-requests">0</div>
+                            <div class="stat-label">Total Requests</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="success-count">0</div>
+                            <div class="stat-label">Success</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="failure-count">0</div>
+                            <div class="stat-label">Failures</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="throughput">0</div>
+                            <div class="stat-label">Req/s</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts">
+                    <div class="chart-container">
+                        <canvas id="throughput-chart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="latency-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
