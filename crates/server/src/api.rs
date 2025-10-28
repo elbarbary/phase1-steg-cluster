@@ -251,8 +251,9 @@ pub async fn cluster_status_handler(
         let healthy = if is_current {
             !state.is_paused()
         } else {
-            // In production, implement health checks
-            true
+            // Check remote node health via HTTP
+            let node_addr = format!("{}:{}", node_config.ip, node_config.http_port);
+            control_plane::health_check(&node_addr).await
         };
 
         nodes.push(NodeStatus {
@@ -382,4 +383,75 @@ impl IntoResponse for AppError {
 
         (status, body).into_response()
     }
+}
+
+// ============================================================================
+// Raft RPC Handlers
+// ============================================================================
+
+pub async fn raft_append_entries_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<control_plane::AppendEntriesRequest>,
+) -> Result<Json<control_plane::AppendEntriesResponse>, AppError> {
+    // Update term if needed
+    if req.term > state.raft_node.get_term().await {
+        state.raft_node.advance_term(req.term).await;
+    }
+
+    // If request is from leader, update leader and role
+    if req.term >= state.raft_node.get_term().await {
+        state.raft_node.set_current_leader(Some(req.leader_id)).await;
+        if !state.raft_node.is_leader().await {
+            state.raft_node.set_follower().await;
+        }
+    }
+
+    // Respond with current term and success
+    let response = control_plane::AppendEntriesResponse {
+        term: state.raft_node.get_term().await,
+        success: true,
+        conflict_opt: None,
+    };
+
+    tracing::debug!(
+        "Node {} received AppendEntries from leader {} (term: {})",
+        state.node_id,
+        req.leader_id,
+        req.term
+    );
+
+    Ok(Json(response))
+}
+
+pub async fn raft_request_vote_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<control_plane::RequestVoteRequest>,
+) -> Result<Json<control_plane::RequestVoteResponse>, AppError> {
+    let current_term = state.raft_node.get_term().await;
+
+    // If request term is newer, update term
+    if req.term > current_term {
+        state.raft_node.advance_term(req.term).await;
+    }
+
+    // Vote if:
+    // 1. Request term >= current term
+    // 2. Haven't voted in this term (simplified - always vote in Phase-1)
+    let vote_granted = req.term >= state.raft_node.get_term().await;
+
+    if vote_granted && req.term > current_term {
+        tracing::info!(
+            "Node {} voting for candidate {} in term {}",
+            state.node_id,
+            req.candidate_id,
+            req.term
+        );
+    }
+
+    let response = control_plane::RequestVoteResponse {
+        term: state.raft_node.get_term().await,
+        vote_granted,
+    };
+
+    Ok(Json(response))
 }

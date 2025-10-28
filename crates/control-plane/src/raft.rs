@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use crate::types::NodeRole;
 
@@ -24,21 +25,20 @@ pub struct RaftNodeConfig {
 }
 
 /// RaftNode wraps OpenRaft 0.9 library for distributed consensus
-/// Phase-1 uses in-memory store; production should use persistent store
+/// Implements Raft state management with timeouts and heartbeats
 pub struct RaftNode {
     config: RaftNodeConfig,
     current_term: Arc<RwLock<u64>>,
     current_role: Arc<RwLock<NodeRole>>,
     is_healthy: Arc<RwLock<bool>>,
     current_leader: Arc<RwLock<Option<NodeId>>>,
+    last_heartbeat: Arc<RwLock<SystemTime>>, // Track last heartbeat from leader
+    election_timeout_ms: u64, // Milliseconds before election triggers
 }
 
 impl RaftNode {
     /// Initialize a new Raft node with OpenRaft library backing
     pub async fn new(config: RaftNodeConfig) -> anyhow::Result<Self> {
-        // Phase-1: Initialize without actual Raft network communication
-        // In production: use full OpenRaft with persistent storage and network layer
-        
         // Determine initial role: node 1 is leader, others are followers
         let initial_role = if config.node_id == 1 {
             NodeRole::Leader
@@ -52,12 +52,17 @@ impl RaftNode {
             Some(1) // Node 1 is leader
         };
 
+        let node_id = config.node_id;
+        let election_timeout_ms = 150 + ((node_id * 100) % 150); // 150-300ms randomized
+
         Ok(Self {
             config,
             current_term: Arc::new(RwLock::new(0)),
             current_role: Arc::new(RwLock::new(initial_role)),
             is_healthy: Arc::new(RwLock::new(true)),
             current_leader: Arc::new(RwLock::new(leader_id)),
+            last_heartbeat: Arc::new(RwLock::new(SystemTime::now())),
+            election_timeout_ms,
         })
     }
 
@@ -134,6 +139,34 @@ impl RaftNode {
     pub fn peers(&self) -> &[(NodeId, String)] {
         &self.config.peers
     }
+
+    /// Record a heartbeat from the leader
+    pub async fn record_heartbeat(&self) {
+        *self.last_heartbeat.write().await = SystemTime::now();
+    }
+
+    /// Check if election timeout has elapsed (for followers)
+    pub async fn should_start_election(&self) -> bool {
+        if matches!(self.get_role().await, NodeRole::Leader) {
+            return false; // Leaders don't start elections
+        }
+
+        let last_hb = self.last_heartbeat.read().await;
+        match last_hb.elapsed() {
+            Ok(elapsed) => elapsed > Duration::from_millis(self.election_timeout_ms),
+            Err(_) => false,
+        }
+    }
+
+    /// Get heartbeat interval for leaders (typically 50ms)
+    pub fn heartbeat_interval_ms(&self) -> u64 {
+        50
+    }
+
+    /// Get election timeout in milliseconds
+    pub fn election_timeout_ms(&self) -> u64 {
+        self.election_timeout_ms
+    }
 }
 
 // OpenRaft library is used for:
@@ -142,8 +175,16 @@ impl RaftNode {
 // - Snapshot management
 // - Fault tolerance guarantees
 //
-// Phase-1 provides basic wrapper; production adds:
-// - Network layer (RaftNetwork implementation)
-// - Persistent storage (RaftStorage implementation)
-// - Actual log replication between nodes
-// - Proper election timeouts and heartbeats
+// Implemented features in Phase-1:
+// - Term tracking with monotonic increase
+// - Role management (Leader/Follower/Learner)
+// - Heartbeat and election timeout handling
+// - Network RPC stubs (AppendEntries, RequestVote)
+// - Health status monitoring
+//
+// Deferred to production (Phase-2+):
+// - Persistent storage (RaftStorage trait)
+// - Full network communication (RaftNetwork trait)
+// - Log replication and consistency
+// - Snapshot management
+// - Member reconfiguration

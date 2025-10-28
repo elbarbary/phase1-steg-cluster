@@ -14,5 +14,6 @@ tracing.workspace = true
 sysinfo.workspace = true
 dashmap.workspace = true
 parking_lot = "0.12"
+reqwest.workspace = true
 
 common = { path = "../common" }

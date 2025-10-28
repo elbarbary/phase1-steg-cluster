@@ -55,6 +55,9 @@ async fn main() -> Result<()> {
         .route("/admin/restore", post(api::admin_restore_handler))
         .route("/healthz", get(api::health_handler))
         .route("/metrics", get(api::metrics_handler))
+        // Raft RPC routes
+        .route("/raft/append-entries", post(api::raft_append_entries_handler))
+        .route("/raft/request-vote", post(api::raft_request_vote_handler))
         // Static files
         .route("/", get(api::serve_index))
         .nest_service("/static", ServeDir::new("static"))
