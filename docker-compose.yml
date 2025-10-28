@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: stego-loadbalancer
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # - ./ssl:/etc/nginx/ssl:ro  # Uncomment for HTTPS
+    networks:
+      stego_network:
+        ipv4_address: 172.20.10.10
+    restart: unless-stopped
+    depends_on:
+      - node1
+      - node2
+      - node3
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Node 1 - Leader
+  node1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stego-node1
+    environment:
+      - NODE_ID=n1
+      - RUST_LOG=info
+    networks:
+      stego_network:
+        ipv4_address: 172.20.10.2
+    ports:
+      - "8081:8081"
+      - "5001:5001"
+    volumes:
+      - ./config:/app/config:ro
+      - ./assets:/app/assets
+      - node1_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 10s
+
+  # Node 2 - Follower
+  node2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stego-node2
+    environment:
+      - NODE_ID=n2
+      - RUST_LOG=info
+    networks:
+      stego_network:
+        ipv4_address: 172.20.10.3
+    ports:
+      - "8082:8082"
+      - "5002:5002"
+    volumes:
+      - ./config:/app/config:ro
+      - ./assets:/app/assets
+      - node2_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8082/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 10s
+
+  # Node 3 - Follower
+  node3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stego-node3
+    environment:
+      - NODE_ID=n3
+      - RUST_LOG=info
+    networks:
+      stego_network:
+        ipv4_address: 172.20.10.4
+    ports:
+      - "8083:8083"
+      - "5003:5003"
+    volumes:
+      - ./config:/app/config:ro
+      - ./assets:/app/assets
+      - node3_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 10s
+
+networks:
+  stego_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.10.0/24
+
+volumes:
+  node1_data:
+  node2_data:
+  node3_data:

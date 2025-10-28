@@ -6,6 +6,7 @@ pub type NodeId = String;
 pub enum NodeRole {
     Leader,
     Follower,
+    Candidate,
     Learner,
 }
 

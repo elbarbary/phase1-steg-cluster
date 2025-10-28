@@ -1,5 +1,5 @@
 use common::ClusterConfig;
-use control_plane::{MetricsCollector, RaftNode, RaftNodeConfig};
+use control_plane::{MetricsCollector, RaftNetworkClient, RaftNode, RaftNodeConfig, start_raft_tasks};
 use image::DynamicImage;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -51,10 +51,16 @@ impl AppState {
         let raft_config = RaftNodeConfig {
             node_id: node_numeric_id,
             raft_addr: format!("{}:{}", node_config_data.ip, node_config_data.raft_port),
-            peers,
+            peers: peers.clone(),
         };
 
         let raft_node = Arc::new(RaftNode::new(raft_config).await?);
+
+        // Initialize network client for Raft communication
+        let network = Arc::new(RaftNetworkClient::new(peers));
+
+        // Start Raft background tasks (election monitoring, heartbeat sending)
+        start_raft_tasks(raft_node.clone(), network);
 
         Ok(Self {
             node_id,

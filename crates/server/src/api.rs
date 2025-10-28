@@ -404,6 +404,9 @@ pub async fn raft_append_entries_handler(
         if !state.raft_node.is_leader().await {
             state.raft_node.set_follower().await;
         }
+        
+        // Record heartbeat to reset election timeout
+        state.raft_node.record_heartbeat().await;
     }
 
     // Respond with current term and success
@@ -427,26 +430,8 @@ pub async fn raft_request_vote_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<control_plane::RequestVoteRequest>,
 ) -> Result<Json<control_plane::RequestVoteResponse>, AppError> {
-    let current_term = state.raft_node.get_term().await;
-
-    // If request term is newer, update term
-    if req.term > current_term {
-        state.raft_node.advance_term(req.term).await;
-    }
-
-    // Vote if:
-    // 1. Request term >= current term
-    // 2. Haven't voted in this term (simplified - always vote in Phase-1)
-    let vote_granted = req.term >= state.raft_node.get_term().await;
-
-    if vote_granted && req.term > current_term {
-        tracing::info!(
-            "Node {} voting for candidate {} in term {}",
-            state.node_id,
-            req.candidate_id,
-            req.term
-        );
-    }
+    // Use the new grant_vote logic which handles term updates and vote tracking
+    let vote_granted = state.raft_node.grant_vote(req.candidate_id, req.term).await;
 
     let response = control_plane::RequestVoteResponse {
         term: state.raft_node.get_term().await,

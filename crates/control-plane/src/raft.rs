@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
@@ -34,6 +35,8 @@ pub struct RaftNode {
     current_leader: Arc<RwLock<Option<NodeId>>>,
     last_heartbeat: Arc<RwLock<SystemTime>>, // Track last heartbeat from leader
     election_timeout_ms: u64, // Milliseconds before election triggers
+    voted_for: Arc<RwLock<Option<NodeId>>>, // Track who we voted for in current term
+    votes_received: Arc<RwLock<HashSet<NodeId>>>, // Track votes received as candidate
 }
 
 impl RaftNode {
@@ -63,6 +66,8 @@ impl RaftNode {
             current_leader: Arc::new(RwLock::new(leader_id)),
             last_heartbeat: Arc::new(RwLock::new(SystemTime::now())),
             election_timeout_ms,
+            voted_for: Arc::new(RwLock::new(None)),
+            votes_received: Arc::new(RwLock::new(HashSet::new())),
         })
     }
 
@@ -166,6 +171,107 @@ impl RaftNode {
     /// Get election timeout in milliseconds
     pub fn election_timeout_ms(&self) -> u64 {
         self.election_timeout_ms
+    }
+
+    /// Start an election (transition to Candidate and increment term)
+    pub async fn start_election(&self) -> u64 {
+        // Increment term
+        let mut term = self.current_term.write().await;
+        *term += 1;
+        let new_term = *term;
+        drop(term);
+
+        // Transition to Candidate
+        *self.current_role.write().await = NodeRole::Candidate;
+
+        // Vote for self
+        *self.voted_for.write().await = Some(self.config.node_id);
+        
+        // Reset votes received and add self-vote
+        let mut votes = self.votes_received.write().await;
+        votes.clear();
+        votes.insert(self.config.node_id);
+        drop(votes);
+
+        // Clear current leader
+        *self.current_leader.write().await = None;
+
+        tracing::info!(
+            "Node {} starting election for term {}",
+            self.config.node_id,
+            new_term
+        );
+
+        new_term
+    }
+
+    /// Record a vote received from a peer
+    pub async fn record_vote(&self, from_node: NodeId) -> bool {
+        let mut votes = self.votes_received.write().await;
+        votes.insert(from_node);
+        
+        // Check if we have majority (more than half)
+        let total_nodes = self.config.peers.len() + 1; // +1 for self
+        let majority = (total_nodes / 2) + 1;
+        let has_majority = votes.len() >= majority;
+
+        if has_majority {
+            tracing::info!(
+                "Node {} won election with {}/{} votes",
+                self.config.node_id,
+                votes.len(),
+                total_nodes
+            );
+        }
+
+        has_majority
+    }
+
+    /// Grant vote for a candidate (if we haven't voted this term)
+    pub async fn grant_vote(&self, candidate_id: NodeId, candidate_term: u64) -> bool {
+        let current_term = self.get_term().await;
+        
+        // Update term if candidate has higher term
+        if candidate_term > current_term {
+            self.advance_term(candidate_term).await;
+            *self.voted_for.write().await = None; // Reset vote for new term
+            *self.current_role.write().await = NodeRole::Follower; // Step down
+        }
+
+        // Check if we can vote
+        let mut voted_for = self.voted_for.write().await;
+        let can_vote = voted_for.is_none() || *voted_for == Some(candidate_id);
+
+        if can_vote && candidate_term >= current_term {
+            *voted_for = Some(candidate_id);
+            tracing::info!(
+                "Node {} granted vote to {} for term {}",
+                self.config.node_id,
+                candidate_id,
+                candidate_term
+            );
+            true
+        } else {
+            tracing::debug!(
+                "Node {} denied vote to {} for term {} (already voted for {:?})",
+                self.config.node_id,
+                candidate_id,
+                candidate_term,
+                *voted_for
+            );
+            false
+        }
+    }
+
+    /// Get who we voted for in current term
+    pub async fn get_voted_for(&self) -> Option<NodeId> {
+        *self.voted_for.read().await
+    }
+
+    /// Reset election state for new term
+    pub async fn reset_election_state(&self) {
+        *self.voted_for.write().await = None;
+        self.votes_received.write().await.clear();
     }
 }
 
