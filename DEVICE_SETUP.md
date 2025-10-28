@@ -10,39 +10,77 @@ This guide explains how to clone the Phase-1 project on Device 2 and Device 3 an
 
 On **Device 2** and **Device 3**, you need:
 
-1. **Rust** (stable toolchain)
-2. **Git**
-3. **Network connectivity** to other devices
-4. **SSH or HTTP access** to the repository
+### Essential Tools
+1. **Rust** (stable toolchain) - Rust compiler and cargo package manager
+2. **Git** - Version control system
+3. **Build tools** - Compiler and development headers
+4. **Network connectivity** - Ethernet/WiFi to other devices
+5. **SSH or HTTPS access** - To clone from GitHub
+
+### Optional but Recommended
+- **curl** - For testing API endpoints
+- **jq** - JSON query tool for pretty-printing API responses
+- **tmux or screen** - Terminal multiplexing for running multiple nodes
+- **nano or vim** - Text editors
+- **Docker & Docker Compose** - If using containerized deployment
+- **nginx** - Load balancer (can run on Device 1 or separate)
+- **htop** - System monitoring
+
+> **📖 For complete installation details**, see `INSTALL_DEPENDENCIES.md` in the repository root.
 
 ---
 
 ## 🚀 DEVICE 2 SETUP
 
-### Step 1: Install Rust (if not already installed)
+### Step 1: Install System Dependencies
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install -y \
+  build-essential \
+  clang \
+  libclang-dev \
+  curl \
+  git \
+  jq \
+  net-tools \
+  netcat \
+  tmux \
+  htop \
+  nano \
+  pkg-config \
+  libssl-dev
+```
+
+**macOS:**
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install dependencies
+brew install \
+  rust \
+  git \
+  curl \
+  jq \
+  tmux \
+  htop \
+  nano \
+  openssl \
+  pkg-config
+```
+
+### Step 2: Install Rust (if not already installed)
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 rustc --version  # Verify installation
+cargo --version
 ```
 
-### Step 2: Install Git (if not already installed)
-
-**Ubuntu/Debian:**
-```bash
-sudo apt update
-sudo apt install git
-git --version
-```
-
-**macOS:**
-```bash
-brew install git
-git --version
-```
-
-### Step 3: Clone the Repository
+### Step 4: Clone the Repository
 
 Replace `YOUR_GITHUB_USERNAME` with your actual GitHub username:
 
@@ -59,7 +97,35 @@ ls -la
 
 You should see: `Cargo.toml`, `README.md`, `crates/`, `static/`, etc.
 
-### Step 4: Set Static IP Address
+### Step 5: Verify All Tools Are Installed
+
+**Run the verification script:**
+
+```bash
+# Check Rust
+rustc --version
+cargo --version
+
+# Check Git
+git --version
+
+# Check build tools
+gcc --version
+clang --version
+
+# Check utilities
+curl --version
+jq --version
+nc -h
+
+# Check for optional tools
+which tmux && tmux -V || echo "tmux not installed"
+which htop && htop -v || echo "htop not installed"
+```
+
+All should return version numbers. If any are missing, refer back to Step 1 for installation.
+
+### Step 6: Set Static IP Address
 
 Configure Device 2 with a static IP. This will be used in the cluster configuration.
 
@@ -97,7 +163,7 @@ ip addr  # Verify IP
 sudo ifconfig en0 inet 172.20.10.3 netmask 255.255.255.0
 ```
 
-### Step 5: Configure Cluster Config
+### Step 7: Configure Cluster Config
 
 Edit the cluster configuration to match your network setup:
 
@@ -138,7 +204,7 @@ loadgen:
 
 Save: `Ctrl+X`, then `Y`, then `Enter`
 
-### Step 6: Test Build
+### Step 8: Test Build
 
 ```bash
 cargo build --release
@@ -151,7 +217,7 @@ First build takes 5-10 minutes. Subsequent builds are faster.
 ls -lh target/release/server
 ```
 
-### Step 7: Verify Connection to Other Nodes
+### Step 9: Verify Connection to Other Nodes
 
 Test network connectivity:
 
@@ -164,7 +230,7 @@ nc -zv 172.20.10.2 5001  # Raft port
 ping -c 1 172.20.10.4
 ```
 
-### Step 8: Run Device 2 (Node n2)
+### Step 10: Run Device 2 (Node n2)
 
 ```bash
 export NODE_ID=n2
@@ -184,9 +250,9 @@ export CONFIG_PATH=./config/cluster.yaml
 
 ## 🚀 DEVICE 3 SETUP
 
-### Step 1-3: Same as Device 2
+### Step 1-4: Same as Device 2
 
-Install Rust, Git, and clone repository as shown above.
+Install system dependencies, Rust, Git, and clone repository as shown above.
 
 ### Step 4: Set Static IP Address
 
