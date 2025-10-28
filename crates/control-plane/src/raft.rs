@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use crate::types::NodeRole;
+use crate::storage::RaftStorage;
 
 pub type NodeId = u64;
 pub type Node = openraft::BasicNode;
@@ -37,11 +38,17 @@ pub struct RaftNode {
     election_timeout_ms: u64, // Milliseconds before election triggers
     voted_for: Arc<RwLock<Option<NodeId>>>, // Track who we voted for in current term
     votes_received: Arc<RwLock<HashSet<NodeId>>>, // Track votes received as candidate
+    storage: Arc<RaftStorage>, // Persistent log and state storage
 }
 
 impl RaftNode {
     /// Initialize a new Raft node with OpenRaft library backing
     pub async fn new(config: RaftNodeConfig) -> anyhow::Result<Self> {
+        // Initialize persistent storage
+        let data_dir = format!("./data/node-{}", config.node_id);
+        tokio::fs::create_dir_all(&data_dir).await?;
+        let storage = Arc::new(RaftStorage::new(&data_dir)?);
+
         // Determine initial role: node 1 is leader, others are followers
         let initial_role = if config.node_id == 1 {
             NodeRole::Leader
@@ -68,6 +75,7 @@ impl RaftNode {
             election_timeout_ms,
             voted_for: Arc::new(RwLock::new(None)),
             votes_received: Arc::new(RwLock::new(HashSet::new())),
+            storage,
         })
     }
 
@@ -272,6 +280,50 @@ impl RaftNode {
     pub async fn reset_election_state(&self) {
         *self.voted_for.write().await = None;
         self.votes_received.write().await.clear();
+    }
+
+    /// Get reference to persistent storage
+    pub fn storage(&self) -> Arc<RaftStorage> {
+        self.storage.clone()
+    }
+
+    /// Append a log entry to persistent storage
+    pub async fn append_log_entry(&self, entry: crate::storage::RaftLogEntry) -> anyhow::Result<()> {
+        self.storage.append_entry(&entry)?;
+        tracing::debug!("Node {} appended log entry at index {}", self.config.node_id, entry.index);
+        Ok(())
+    }
+
+    /// Get log entry from persistent storage
+    pub async fn get_log_entry(&self, index: u64) -> anyhow::Result<Option<crate::storage::RaftLogEntry>> {
+        self.storage.get_entry(index)
+    }
+
+    /// Get log entries in range
+    pub async fn get_log_entries(&self, start: u64, end: u64) -> anyhow::Result<Vec<crate::storage::RaftLogEntry>> {
+        self.storage.get_entries(start, end)
+    }
+
+    /// Persist term and voted_for to storage
+    pub async fn persist_state(&self) -> anyhow::Result<()> {
+        let state = crate::storage::RaftState {
+            current_term: self.current_term.read().await.clone(),
+            voted_for: self.voted_for.read().await.clone(),
+            commit_index: 0, // Will be updated with append entries
+            last_applied: 0,
+        };
+        self.storage.save_state(&state)?;
+        Ok(())
+    }
+
+    /// Restore state from persistent storage
+    pub async fn restore_state(&self) -> anyhow::Result<()> {
+        if let Some(state) = self.storage.load_state()? {
+            *self.current_term.write().await = state.current_term;
+            *self.voted_for.write().await = state.voted_for;
+            tracing::info!("Node {} restored state from storage: term={}", self.config.node_id, state.current_term);
+        }
+        Ok(())
     }
 }
 

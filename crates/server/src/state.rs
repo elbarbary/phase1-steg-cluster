@@ -56,6 +56,9 @@ impl AppState {
 
         let raft_node = Arc::new(RaftNode::new(raft_config).await?);
 
+        // Restore persistent state from storage (term, voted_for, etc.)
+        raft_node.restore_state().await?;
+
         // Initialize network client for Raft communication
         let network = Arc::new(RaftNetworkClient::new(peers));
 

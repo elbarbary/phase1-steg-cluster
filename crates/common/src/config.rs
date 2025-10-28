@@ -48,6 +48,16 @@ impl ClusterConfig {
         self.nodes.iter().find(|n| n.id == node_id)
     }
 
+    pub fn find_node_by_id(&self, numeric_id: u64) -> Option<&NodeConfig> {
+        let str_id = match numeric_id {
+            1 => "n1",
+            2 => "n2",
+            3 => "n3",
+            _ => return None,
+        };
+        self.nodes.iter().find(|n| n.id == str_id)
+    }
+
     pub fn get_all_node_urls(&self) -> Vec<String> {
         self.nodes
             .iter()

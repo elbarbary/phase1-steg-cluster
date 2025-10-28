@@ -13,7 +13,24 @@ use std::time::Instant;
 use uuid::Uuid;
 
 use crate::state::AppState;
-use control_plane::{ClusterStatus, NodeRole, NodeStatus};
+use control_plane::{ClusterStatus, NodeRole, NodeStatus, NotLeaderResponse};
+
+// ============================================================================
+// Helper: Check if this node is leader
+// ============================================================================
+
+async fn check_is_leader(state: &Arc<AppState>) -> Result<(), AppError> {
+    if !state.raft_node.is_leader().await {
+        let current_leader = state.raft_node.get_current_leader().await;
+        let leader_addr = current_leader.and_then(|lid| {
+            state.config.find_node_by_id(lid as u64).map(|n| format!("{}:{}", n.ip, n.http_port))
+        });
+
+        let response = NotLeaderResponse::new(current_leader, leader_addr);
+        return Err(AppError::NotLeader(response));
+    }
+    Ok(())
+}
 
 // ============================================================================
 // Embed Handler
@@ -356,32 +373,43 @@ pub enum AppError {
     UnprocessableEntity(String),
     Internal(String),
     ServiceUnavailable,
+    NotLeader(NotLeaderResponse),
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
-            AppError::PayloadTooLarge { needed, available } => (
-                StatusCode::PAYLOAD_TOO_LARGE,
-                format!(
-                    "Payload too large: need {} bytes, available {} bytes",
-                    needed, available
-                ),
-            ),
-            AppError::UnprocessableEntity(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
-            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            AppError::ServiceUnavailable => {
-                (StatusCode::SERVICE_UNAVAILABLE, "Service paused".to_string())
+        match self {
+            AppError::NotLeader(resp) => {
+                let status = StatusCode::TEMPORARY_REDIRECT;
+                let body = Json(resp);
+                (status, body).into_response()
             }
-        };
+            _ => {
+                let (status, message) = match self {
+                    AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+                    AppError::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
+                    AppError::PayloadTooLarge { needed, available } => (
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        format!(
+                            "Payload too large: need {} bytes, available {} bytes",
+                            needed, available
+                        ),
+                    ),
+                    AppError::UnprocessableEntity(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
+                    AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+                    AppError::ServiceUnavailable => {
+                        (StatusCode::SERVICE_UNAVAILABLE, "Service paused".to_string())
+                    }
+                    AppError::NotLeader(_) => unreachable!(),
+                };
 
-        let body = Json(serde_json::json!({
-            "error": message,
-        }));
+                let body = Json(serde_json::json!({
+                    "error": message,
+                }));
 
-        (status, body).into_response()
+                (status, body).into_response()
+            }
+        }
     }
 }
 

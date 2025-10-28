@@ -161,22 +161,42 @@ async fn perform_embed(client: &reqwest::Client, server: &str, index: usize) -> 
     let dataset_url = format!("{}/api/dataset/{}", server, dataset_idx);
     let img_bytes = client.get(&dataset_url).send().await?.bytes().await?;
 
-    // Upload for embedding
-    let form = multipart::Form::new().part(
-        "file",
-        multipart::Part::bytes(img_bytes.to_vec())
-            .file_name("secret.png")
-            .mime_str("image/png")?,
-    );
+    // Upload for embedding with retry logic for NotLeader
+    let mut current_server = server.to_string();
+    let mut retries = 0;
+    const MAX_RETRIES: usize = 3;
 
-    let embed_url = format!("{}/api/embed", server);
-    let resp = client.post(&embed_url).multipart(form).send().await?;
+    loop {
+        let form = multipart::Form::new().part(
+            "file",
+            multipart::Part::bytes(img_bytes.to_vec())
+                .file_name("secret.png")
+                .mime_str("image/png")?,
+        );
 
-    if !resp.status().is_success() {
-        anyhow::bail!("Embed failed: {}", resp.status());
+        let embed_url = format!("{}/api/embed", current_server);
+        let resp = client.post(&embed_url).multipart(form).send().await?;
+
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(());
+        }
+
+        // Check if NotLeader (307 Temporary Redirect)
+        if status.as_u16() == 307 && retries < MAX_RETRIES {
+            // Try to parse redirect response
+            if let Ok(redirect_data) = resp.json::<serde_json::Value>().await {
+                if let Some(leader_addr) = redirect_data.get("leader_address").and_then(|v| v.as_str()) {
+                    current_server = format!("http://{}", leader_addr);
+                    retries += 1;
+                    continue; // Retry with new server
+                }
+            }
+        }
+
+        // Other error or max retries reached
+        anyhow::bail!("Embed failed: {}", status);
     }
-
-    Ok(())
 }
 
 async fn perform_extract(client: &reqwest::Client, server: &str, index: usize) -> Result<()> {
