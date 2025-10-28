@@ -63,7 +63,7 @@ You should see: `Cargo.toml`, `README.md`, `crates/`, `static/`, etc.
 
 Configure Device 2 with a static IP. This will be used in the cluster configuration.
 
-**Example: Set to 10.0.0.12**
+**Example: Set to 172.20.10.3**
 
 **Ubuntu/Debian (Netplan):**
 ```bash
@@ -78,8 +78,8 @@ network:
     eth0:
       dhcp4: no
       addresses:
-        - 10.0.0.12/24
-      gateway4: 10.0.0.1
+        - 172.20.10.3/24
+      gateway4: 172.20.10.1
       nameservers:
         addresses: [8.8.8.8, 8.8.4.4]
 ```
@@ -94,7 +94,7 @@ ip addr  # Verify IP
 ```bash
 # System Preferences > Network > Advanced > TCP/IP
 # Or use command line:
-sudo ifconfig en0 inet 10.0.0.12 netmask 255.255.255.0
+sudo ifconfig en0 inet 172.20.10.3 netmask 255.255.255.0
 ```
 
 ### Step 5: Configure Cluster Config
@@ -106,23 +106,23 @@ nano config/cluster.yaml
 ```
 
 Make sure:
-- Device 1 (this machine): n2 with IP 10.0.0.12
-- Device 2: n1 with IP 10.0.0.11 (Device 1's IP)
-- Device 3: n3 with IP 10.0.0.13
+- Device 1 (this machine): n2 with IP 172.20.10.3
+- Device 2: n1 with IP 172.20.10.2 (Device 1's IP)
+- Device 3: n3 with IP 172.20.10.4
 
 ```yaml
 cluster_name: "phase1"
 nodes:
   - id: "n1"
-    ip: "10.0.0.11"         # Device 1
+    ip: "172.20.10.2"         # Device 1
     http_port: 8081
     raft_port: 5001
   - id: "n2"
-    ip: "10.0.0.12"         # Device 2 (THIS MACHINE)
+    ip: "172.20.10.3"         # Device 2 (THIS MACHINE)
     http_port: 8082
     raft_port: 5002
   - id: "n3"
-    ip: "10.0.0.13"         # Device 3
+    ip: "172.20.10.4"         # Device 3
     http_port: 8083
     raft_port: 5003
 stego:
@@ -156,12 +156,12 @@ ls -lh target/release/server
 Test network connectivity:
 
 ```bash
-# Test Device 1 (10.0.0.11)
-ping -c 1 10.0.0.11
-nc -zv 10.0.0.11 5001  # Raft port
+# Test Device 1 (172.20.10.2)
+ping -c 1 172.20.10.2
+nc -zv 172.20.10.2 5001  # Raft port
 
-# Test Device 3 (10.0.0.13) - skip if not yet running
-ping -c 1 10.0.0.13
+# Test Device 3 (172.20.10.4) - skip if not yet running
+ping -c 1 172.20.10.4
 ```
 
 ### Step 8: Run Device 2 (Node n2)
@@ -174,7 +174,7 @@ export CONFIG_PATH=./config/cluster.yaml
 
 **Expected output:**
 ```
-🚀 Starting node n2 on 10.0.0.12:8082
+🚀 Starting node n2 on 172.20.10.3:8082
 [INFO] Loading cover image from assets/cover.png
 [INFO] Raft node initialized
 [INFO] Server listening on 0.0.0.0:8082
@@ -190,7 +190,7 @@ Install Rust, Git, and clone repository as shown above.
 
 ### Step 4: Set Static IP Address
 
-Configure Device 3 with **10.0.0.13**
+Configure Device 3 with **172.20.10.4**
 
 **Ubuntu/Debian (Netplan):**
 ```bash
@@ -204,8 +204,8 @@ network:
     eth0:
       dhcp4: no
       addresses:
-        - 10.0.0.13/24
-      gateway4: 10.0.0.1
+        - 172.20.10.4/24
+      gateway4: 172.20.10.1
       nameservers:
         addresses: [8.8.8.8, 8.8.4.4]
 ```
@@ -218,21 +218,21 @@ ip addr
 
 ### Step 5: Configure Cluster Config
 
-Edit `config/cluster.yaml` (same as Device 2, but make sure n3 IP is 10.0.0.13):
+Edit `config/cluster.yaml` (same as Device 2, but make sure n3 IP is 172.20.10.4):
 
 ```yaml
 cluster_name: "phase1"
 nodes:
   - id: "n1"
-    ip: "10.0.0.11"         # Device 1
+    ip: "172.20.10.2"         # Device 1
     http_port: 8081
     raft_port: 5001
   - id: "n2"
-    ip: "10.0.0.12"         # Device 2
+    ip: "172.20.10.3"         # Device 2
     http_port: 8082
     raft_port: 5002
   - id: "n3"
-    ip: "10.0.0.13"         # Device 3 (THIS MACHINE)
+    ip: "172.20.10.4"         # Device 3 (THIS MACHINE)
     http_port: 8083
     raft_port: 5003
 # ... rest same as Device 2
@@ -248,8 +248,8 @@ ls -lh target/release/server
 ### Step 7: Test Network Connectivity
 
 ```bash
-ping -c 1 10.0.0.11  # Device 1
-ping -c 1 10.0.0.12  # Device 2
+ping -c 1 172.20.10.2  # Device 1
+ping -c 1 172.20.10.3  # Device 2
 ```
 
 ### Step 8: Run Device 3 (Node n3)
@@ -262,7 +262,7 @@ export CONFIG_PATH=./config/cluster.yaml
 
 **Expected output:**
 ```
-🚀 Starting node n3 on 10.0.0.13:8083
+🚀 Starting node n3 on 172.20.10.4:8083
 [INFO] Loading cover image from assets/cover.png
 [INFO] Raft node initialized
 [INFO] Server listening on 0.0.0.0:8083
@@ -274,7 +274,7 @@ export CONFIG_PATH=./config/cluster.yaml
 
 Once all three devices are ready, start them in order:
 
-### Device 1 (10.0.0.11)
+### Device 1 (172.20.10.2)
 ```bash
 cd ~/phase1-steg-cluster
 export NODE_ID=n1
@@ -283,7 +283,7 @@ export NODE_ID=n1
 
 **Wait 2-3 seconds, then:**
 
-### Device 2 (10.0.0.12)
+### Device 2 (172.20.10.3)
 ```bash
 cd ~/phase1-steg-cluster
 export NODE_ID=n2
@@ -292,7 +292,7 @@ export NODE_ID=n2
 
 **Wait 2-3 seconds, then:**
 
-### Device 3 (10.0.0.13)
+### Device 3 (172.20.10.4)
 ```bash
 cd ~/phase1-steg-cluster
 export NODE_ID=n3
@@ -309,13 +309,13 @@ export NODE_ID=n3
 
 ```bash
 # Test Device 1's HTTP port
-curl -s http://10.0.0.11:8081/healthz | jq .
+curl -s http://172.20.10.2:8081/healthz | jq .
 
 # Get cluster status
-curl -s http://10.0.0.11:8081/cluster/status | jq .
+curl -s http://172.20.10.2:8081/cluster/status | jq .
 
 # Check all three nodes are healthy
-curl -s http://10.0.0.11:8081/cluster/status | jq '.nodes[] | {id, healthy, role}'
+curl -s http://172.20.10.2:8081/cluster/status | jq '.nodes[] | {id, healthy, role}'
 ```
 
 **Expected output:**
@@ -340,9 +340,9 @@ curl -s http://10.0.0.11:8081/cluster/status | jq '.nodes[] | {id, healthy, role
 ### Access Web GUI:
 
 From any computer on the network:
-- http://10.0.0.11:8081
-- http://10.0.0.12:8082
-- http://10.0.0.13:8083
+- http://172.20.10.2:8081
+- http://172.20.10.3:8082
+- http://172.20.10.4:8083
 
 All three should show the same cluster status with 3 healthy nodes.
 
@@ -354,7 +354,7 @@ All three should show the same cluster status with 3 healthy nodes.
 
 ```bash
 # Test embed on Device 1
-curl -X POST -F "file=@/path/to/image.png" http://10.0.0.11:8081/api/embed | jq .
+curl -X POST -F "file=@/path/to/image.png" http://172.20.10.2:8081/api/embed | jq .
 
 # Should return:
 # {
@@ -376,7 +376,7 @@ cargo run -p loadgen --release -- \
   --mode embed \
   --num-clients 30 \
   --reqs-per-client 200 \
-  --server-list "http://10.0.0.11:8081,http://10.0.0.12:8082,http://10.0.0.13:8083"
+  --server-list "http://172.20.10.2:8081,http://172.20.10.3:8082,http://172.20.10.4:8083"
 ```
 
 This will:
@@ -409,7 +409,7 @@ Latency percentiles (ms):
 **Solution:**
 1. Check firewall allows traffic on ports 8081-8083 (HTTP) and 5001-5003 (Raft)
 2. Verify IPs are correct: `ip addr` on each device
-3. Test connectivity: `nc -zv 10.0.0.11 5001`
+3. Test connectivity: `nc -zv 172.20.10.2 5001`
 
 ### Issue: Node won't start ("Address already in use")
 
@@ -455,7 +455,7 @@ cargo build --release
 
 From a laptop on the network:
 ```bash
-curl http://10.0.0.11:8081/cluster/status | jq .
+curl http://172.20.10.2:8081/cluster/status | jq .
 ```
 
 Show:
@@ -468,10 +468,10 @@ Show:
 
 ```bash
 # Embed on Device 1
-curl -X POST -F "file=@secret.png" http://10.0.0.11:8081/api/embed
+curl -X POST -F "file=@secret.png" http://172.20.10.2:8081/api/embed
 
 # Extract on Device 2
-curl -X POST -F "file=@stego.png" http://10.0.0.12:8082/api/extract
+curl -X POST -F "file=@stego.png" http://172.20.10.3:8082/api/extract
 
 # Both work because load is balanced across nodes
 ```
@@ -484,7 +484,7 @@ cargo run -p loadgen --release -- \
   --mode embed \
   --num-clients 20 \
   --reqs-per-client 200 \
-  --server-list "http://10.0.0.11:8081,http://10.0.0.12:8082,http://10.0.0.13:8083"
+  --server-list "http://172.20.10.2:8081,http://172.20.10.3:8082,http://172.20.10.4:8083"
 ```
 
 Watch requests distributed across all 3 nodes.
@@ -495,7 +495,7 @@ Watch requests distributed across all 3 nodes.
 # Pause Node 1
 curl -X POST -H "Content-Type: application/json" \
   -d '{"action":"pause"}' \
-  http://10.0.0.11:8081/admin/fail
+  http://172.20.10.2:8081/admin/fail
 
 # Observe:
 # - Load balancer routes to remaining nodes
@@ -510,7 +510,7 @@ curl -X POST -H "Content-Type: application/json" \
 # Crash Node 1 (kill process)
 curl -X POST -H "Content-Type: application/json" \
   -d '{"action":"crash"}' \
-  http://10.0.0.11:8081/admin/fail
+  http://172.20.10.2:8081/admin/fail
 
 # Observe:
 # - Process exits
@@ -528,19 +528,19 @@ curl -X POST -H "Content-Type: application/json" \
 
 ```bash
 # Device 1
-curl http://10.0.0.11:8081/healthz
+curl http://172.20.10.2:8081/healthz
 
 # Device 2
-curl http://10.0.0.12:8082/healthz
+curl http://172.20.10.3:8082/healthz
 
 # Device 3
-curl http://10.0.0.13:8083/healthz
+curl http://172.20.10.4:8083/healthz
 ```
 
 ### Get Metrics
 
 ```bash
-curl http://10.0.0.11:8081/metrics
+curl http://172.20.10.2:8081/metrics
 ```
 
 ### Monitor Logs
@@ -581,18 +581,18 @@ pkill -f "cargo run -p server"
 
 Or from one device (if SSH configured):
 ```bash
-ssh user@10.0.0.11 "pkill -f 'cargo run -p server'"
-ssh user@10.0.0.12 "pkill -f 'cargo run -p server'"
-ssh user@10.0.0.13 "pkill -f 'cargo run -p server'"
+ssh user@172.20.10.2 "pkill -f 'cargo run -p server'"
+ssh user@172.20.10.3 "pkill -f 'cargo run -p server'"
+ssh user@172.20.10.4 "pkill -f 'cargo run -p server'"
 ```
 
 ---
 
 ## 📋 SUMMARY CHECKLIST
 
-- [ ] Device 1: Clone, build, running on 10.0.0.11:8081
-- [ ] Device 2: Clone, build, running on 10.0.0.12:8082
-- [ ] Device 3: Clone, build, running on 10.0.0.13:8083
+- [ ] Device 1: Clone, build, running on 172.20.10.2:8081
+- [ ] Device 2: Clone, build, running on 172.20.10.3:8082
+- [ ] Device 3: Clone, build, running on 172.20.10.4:8083
 - [ ] All devices can ping each other
 - [ ] Cluster status shows 3 healthy nodes
 - [ ] Web GUI accessible from any device
