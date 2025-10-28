@@ -28,8 +28,10 @@ async fn main() -> Result<()> {
         .init();
 
     // Load config
-    let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "./config/cluster.yaml".to_string());
-    let config = ClusterConfig::from_file(&config_path)?;
+    let config_path = env::var("CONFIG_PATH")
+        .unwrap_or_else(|_| "./config/cluster.yaml".to_string());
+    let config = ClusterConfig::from_file(&config_path)
+        .map_err(|e| anyhow::anyhow!("Failed to load config from {}: {}", config_path, e))?;
 
     let node_id = env::var("NODE_ID").expect("NODE_ID env var required");
     let node_config = config

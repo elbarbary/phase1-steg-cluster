@@ -1,5 +1,4 @@
 use crate::error::{Result, StegoError};
-use bytes::Bytes;
 use crc32fast::Hasher;
 use flate2::write::{DeflateEncoder, DeflateDecoder};
 use flate2::Compression;
@@ -60,7 +59,7 @@ pub fn embed(
     let required_bits = header.len() as u64 * 8;
     if required_bits > bits_available {
         return Err(StegoError::CapacityExceeded {
-            needed: (required_bits + 7) / 8,
+            needed: required_bits.div_ceil(8),
             available: capacity_bytes,
         });
     }
@@ -84,7 +83,7 @@ pub fn embed(
             let pixel = rgb_img.get_pixel(x, y);
             let mut new_pixel = [pixel[0], pixel[1], pixel[2]];
 
-            for ch in 0..3 {
+            for _ in 0..3 {
                 if bit_index >= total_bits {
                     break;
                 }
@@ -94,7 +93,7 @@ pub fn embed(
                 let bit = (header[byte_idx] >> bit_offset) & 1;
 
                 // Clear LSB and set new bit
-                new_pixel[ch] = (new_pixel[ch] & !1) | bit;
+                new_pixel[bit_index % 3] = (new_pixel[bit_index % 3] & !1) | bit;
                 bit_index += 1;
             }
 
@@ -108,7 +107,7 @@ pub fn embed(
 /// Extract secret bytes from a stego image
 pub fn extract(
     stego: &DynamicImage,
-    lsb_per_channel: u8,
+    _lsb_per_channel: u8,
     compress: bool,
 ) -> Result<Vec<u8>> {
     let (width, height) = stego.dimensions();

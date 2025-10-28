@@ -1,7 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
 use reqwest::multipart;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -66,7 +65,7 @@ impl Stats {
             return 0.0;
         }
         let mut sorted = self.latencies.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.total_cmp(b));
         let idx = ((sorted.len() as f64 * p) as usize).min(sorted.len() - 1);
         sorted[idx]
     }
@@ -103,7 +102,7 @@ async fn main() -> Result<()> {
     // Spawn worker tasks
     let mut handles = vec![];
 
-    for client_id in 0..args.num_clients {
+    for _client_id in 0..args.num_clients {
         let servers_clone = servers.clone();
         let client_clone = client.clone();
         let mode_clone = args.mode.clone();
@@ -112,11 +111,9 @@ async fn main() -> Result<()> {
 
         let handle = tokio::spawn(async move {
             let mut local_stats = Stats::new();
-            let mut server_idx = 0;
 
             for req_id in 0..reqs {
-                let server = &servers_clone[server_idx % servers_clone.len()];
-                server_idx += 1;
+                let server = &servers_clone[req_id % servers_clone.len()];
 
                 let req_start = Instant::now();
                 let success = match mode_clone.as_str() {
@@ -198,7 +195,7 @@ async fn perform_extract(client: &reqwest::Client, server: &str, index: usize) -
     );
 
     let extract_url = format!("{}/api/extract", server);
-    let resp = client.post(&extract_url).multipart(form).send().await?;
+    let _resp = client.post(&extract_url).multipart(form).send().await?;
 
     // Extract will likely fail due to invalid stego data, but that's okay for load testing
     // We're measuring throughput and latency

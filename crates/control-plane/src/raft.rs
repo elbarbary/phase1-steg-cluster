@@ -1,4 +1,3 @@
-use openraft::Config;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;

@@ -1,7 +1,6 @@
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use sysinfo::System;
 
 const WINDOW_SIZE: usize = 60; // 60 seconds
 
@@ -22,17 +21,12 @@ pub struct NodeMetrics {
 
 pub struct MetricsCollector {
     requests: Arc<DashMap<String, Vec<RequestRecord>>>,
-    system: Arc<parking_lot::Mutex<System>>,
 }
 
 impl MetricsCollector {
     pub fn new() -> Self {
-        let mut system = System::new_all();
-        system.refresh_all();
-        
         Self {
             requests: Arc::new(DashMap::new()),
-            system: Arc::new(parking_lot::Mutex::new(system)),
         }
     }
 
@@ -43,7 +37,7 @@ impl MetricsCollector {
             success,
         };
 
-        let mut entry = self.requests.entry(node_id.to_string()).or_insert_with(Vec::new);
+        let mut entry = self.requests.entry(node_id.to_string()).or_default();
         entry.push(record);
 
         // Keep only recent records
@@ -65,7 +59,7 @@ impl MetricsCollector {
             let qps_1m = recent.len() as f32 / 60.0;
             
             let mut latencies: Vec<f64> = recent.iter().map(|r| r.latency_ms).collect();
-            latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            latencies.sort_by(|a, b| a.total_cmp(b));
             
             let p95_ms = if !latencies.is_empty() {
                 let idx = ((latencies.len() as f64 * 0.95) as usize).min(latencies.len() - 1);

@@ -219,16 +219,16 @@ pub async fn cluster_status_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ClusterStatus>, AppError> {
     let term = state.raft_node.get_term().await;
-    let current_role = state.raft_node.get_role().await;
     
-    // Determine leader (simplified - in real system, query Raft state)
-    let leader_id = if current_role == NodeRole::Leader {
-        Some(state.node_id.clone())
-    } else {
-        // In a real implementation, we'd query other nodes
-        // For this phase, we'll use a simple heuristic
-        Some("n1".to_string()) // Default to n1 as leader
-    };
+    // Get leader from Raft state - convert numeric ID to string
+    let leader_id = state.raft_node.get_current_leader().await.map(|id| {
+        match id {
+            1 => "n1".to_string(),
+            2 => "n2".to_string(),
+            3 => "n3".to_string(),
+            _ => format!("n{}", id),
+        }
+    });
 
     // Build node statuses
     let mut nodes = Vec::new();
@@ -329,11 +329,9 @@ pub async fn health_handler(
 
 pub async fn metrics_handler() -> impl IntoResponse {
     // Return simple Prometheus-compatible metrics
-    let body = format!(
-        "# HELP requests_total Total number of requests\n\
-         # TYPE requests_total counter\n\
-         requests_total 0\n"
-    );
+    let body = "# HELP requests_total Total number of requests\n\
+                # TYPE requests_total counter\n\
+                requests_total 0\n";
     (StatusCode::OK, [("Content-Type", "text/plain")], body)
 }
 

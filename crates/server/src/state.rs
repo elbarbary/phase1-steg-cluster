@@ -24,7 +24,8 @@ impl AppState {
         let metrics = Arc::new(MetricsCollector::new());
 
         // Initialize Raft node (simplified - just track state, not full consensus)
-        let node_config_data = config.find_node(&node_id).unwrap();
+        let node_config_data = config.find_node(&node_id)
+            .ok_or_else(|| anyhow::anyhow!("Node {} not found in cluster config", node_id))?;
         let node_numeric_id = match node_id.as_str() {
             "n1" => 1u64,
             "n2" => 2u64,

@@ -1,4 +1,4 @@
-use image::{DynamicImage, ImageBuffer, Rgb, RgbImage};
+use image::{DynamicImage, ImageBuffer, Rgb};
 
 /// Generate a default cover image (gradient pattern)
 pub fn generate_cover_image(width: u32, height: u32) -> DynamicImage {
