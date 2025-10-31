@@ -76,8 +76,10 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                                     // CRITICAL FIX: Age the heartbeat so should_start_election() returns true
                                     raft_node.age_heartbeat_for_election().await;
                                     
+                                    // ALSO reset last_election_attempt so backoff doesn't block us
+                                    last_election_attempt = std::time::Instant::now() - Duration::from_secs(1);
+                                    
                                     leader_probe_count = 0;
-                                    // Don't need to manipulate last_election_attempt - the aged heartbeat will trigger election
                                 }
                             } else {
                                 leader_probe_count = 0; // Reset counter if we can reach leader
