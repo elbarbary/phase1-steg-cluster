@@ -27,6 +27,12 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                 continue;
             }
 
+            // Skip election checks if we're currently the leader
+            // (but keep the task running so we can restart elections if we step down)
+            if raft_node.is_leader().await {
+                continue;
+            }
+
             // **PROACTIVE LEADER HEALTH CHECK**: Detect dead leaders faster
             // If we're a follower and we know who the leader is, try to reach it
             // If we can't reach it several times in a row, force election by clearing heartbeat
@@ -137,7 +143,9 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
 
                                     // Start sending heartbeats
                                     start_heartbeat_sender(raft_node.clone(), network.clone());
-                                    return; // Exit election monitor
+                                    
+                                    // DON'T exit - keep election monitor running in case we step down
+                                    break; // Exit vote counting loop, but continue election monitor loop
                                 }
                             } else {
                                 tracing::debug!(
@@ -169,7 +177,9 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                     );
                     raft_node.set_leader().await;
                     start_heartbeat_sender(raft_node.clone(), network.clone());
-                    return; // Exit election monitor
+                    
+                    // DON'T exit - keep election monitor running in case we step down
+                    continue; // Skip to next iteration, will be skipped by is_leader() check
                 }
 
                 // If we didn't win, log and wait for next timeout
