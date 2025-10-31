@@ -155,14 +155,28 @@ impl RaftNode {
 
     /// Check if election timeout has elapsed (for followers)
     pub async fn should_start_election(&self) -> bool {
-        if matches!(self.get_role().await, NodeRole::Leader) {
-            return false; // Leaders don't start elections
+        if self.is_leader().await {
+            return false;
         }
-
         let last_hb = self.last_heartbeat.read().await;
-        match last_hb.elapsed() {
-            Ok(elapsed) => elapsed > Duration::from_millis(self.election_timeout_ms),
-            Err(_) => false,
+        match SystemTime::now().duration_since(*last_hb) {
+            Ok(elapsed) => {
+                let should_election = elapsed > Duration::from_millis(self.election_timeout_ms);
+                
+                // Debug: Log election timeout status every 500ms
+                if elapsed.as_millis() % 500 < 50 {
+                    tracing::trace!(
+                        "Node {} election timeout check: elapsed={}ms, timeout={}ms, should_start={}",
+                        self.node_id(),
+                        elapsed.as_millis(),
+                        self.election_timeout_ms,
+                        should_election
+                    );
+                }
+                
+                should_election
+            },
+            Err(_) => true, // Clock went backwards? Trigger election
         }
     }
 

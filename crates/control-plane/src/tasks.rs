@@ -17,6 +17,7 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
         let min_election_interval = Duration::from_millis(300); // Wait at least 300ms between election attempts
         let startup_time = std::time::Instant::now();
         let single_node_grace_period = Duration::from_secs(5); // After 5s, a single node becomes leader even without quorum
+        let mut leader_probe_count = 0; // Track failed probes to current leader
 
         loop {
             interval.tick().await;
@@ -26,7 +27,64 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                 continue;
             }
 
-            // Check if we should start election
+            // **NEW**: Proactively probe the leader to detect if it's dead
+            // If we're a follower and we know who the leader is, try to reach it
+            // If we can't reach it several times in a row, force election early
+            if !raft_node.is_leader().await {
+                if let Some(leader_id) = raft_node.get_current_leader().await {
+                    // Try to contact leader
+                    let req = RequestVoteRequest {
+                        term: raft_node.get_term().await,
+                        candidate_id: raft_node.node_id(),
+                        last_log_index: 0,
+                        last_log_term: 0,
+                    };
+
+                    // Try to reach leader to see if it's alive
+                    let peers = raft_node.peers();
+                    let leader_addr = peers.iter().find(|(id, _)| *id == leader_id).map(|(_, addr)| addr.clone());
+                    
+                    if let Some(leader_addr) = leader_addr {
+                        let client = reqwest::Client::builder()
+                            .timeout(std::time::Duration::from_millis(100))
+                            .build()
+                            .ok();
+                        
+                        if let Some(client) = client {
+                            let url = format!("http://{}/raft/request-vote", leader_addr);
+                            let probe_result = tokio::time::timeout(
+                                Duration::from_millis(150),
+                                client.post(&url).json(&req).send()
+                            ).await;
+                            
+                            if probe_result.is_err() {
+                                leader_probe_count += 1;
+                                tracing::debug!(
+                                    "Node {} failed to reach leader {} (attempt {})",
+                                    raft_node.node_id(),
+                                    leader_id,
+                                    leader_probe_count
+                                );
+                                
+                                // If leader unreachable 3+ times in a row, trigger election immediately
+                                if leader_probe_count >= 3 && last_election_attempt.elapsed() > Duration::from_millis(100) {
+                                    tracing::warn!(
+                                        "Node {} detected leader {} is unreachable (3+ failed probes), triggering immediate election",
+                                        raft_node.node_id(),
+                                        leader_id
+                                    );
+                                    leader_probe_count = 0;
+                                    last_election_attempt = std::time::Instant::now() - Duration::from_millis(500); // Force next check to proceed
+                                }
+                            } else {
+                                leader_probe_count = 0; // Reset counter if we can reach leader
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check if we should start election (timeout-based or early detection)
             if raft_node.should_start_election().await {
                 // Add backoff: don't attempt elections too frequently
                 // (prevents election storms when isolated single node)
@@ -40,7 +98,7 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                 let new_term = raft_node.start_election().await;
 
                 tracing::warn!(
-                    "Node {} detected leader timeout, starting election for term {}",
+                    "Node {} detected leader timeout or probed dead leader, starting election for term {}",
                     raft_node.node_id(),
                     new_term
                 );
