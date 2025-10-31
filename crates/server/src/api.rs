@@ -433,7 +433,9 @@ pub async fn raft_append_entries_handler(
         // If we're currently leader but received AppendEntries from another leader
         // with same or higher term, we must step down (only one leader per term)
         let our_node_id = state.raft_node.node_id();
-        if state.raft_node.is_leader().await && req.leader_id != our_node_id {
+        let is_stepping_down = state.raft_node.is_leader().await && req.leader_id != our_node_id;
+        
+        if is_stepping_down {
             tracing::warn!(
                 "Node {} stepping down: received AppendEntries from {} in term {}",
                 state.node_id,
@@ -441,12 +443,20 @@ pub async fn raft_append_entries_handler(
                 req.term
             );
             state.raft_node.set_follower().await;
+            
+            // CRITICAL FIX: When stepping down, give leader grace period to establish
+            // This prevents immediate re-elections after a legitimate AppendEntries
+            // Grace period = full election timeout (50-100ms) to allow new leader to send heartbeats
+            let grace_period_ms = state.raft_node.election_timeout_ms() + 50;
+            state.raft_node.record_heartbeat_with_grace(grace_period_ms).await;
         } else if !state.raft_node.is_leader().await {
             state.raft_node.set_follower().await;
+            // Regular heartbeat record for normal AppendEntries
+            state.raft_node.record_heartbeat().await;
+        } else {
+            // We're still leader, just record the heartbeat
+            state.raft_node.record_heartbeat().await;
         }
-        
-        // Record heartbeat to reset election timeout
-        state.raft_node.record_heartbeat().await;
     }
 
     // Respond with current term and success

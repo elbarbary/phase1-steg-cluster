@@ -153,6 +153,19 @@ impl RaftNode {
         *self.last_heartbeat.write().await = SystemTime::now();
     }
 
+    /// Record heartbeat with grace period (e.g., after stepping down)
+    /// Sets heartbeat to near-future to give leader time to establish
+    /// This prevents immediate re-elections after stepping down
+    pub async fn record_heartbeat_with_grace(&self, grace_ms: u64) {
+        let future_time = SystemTime::now() + Duration::from_millis(grace_ms);
+        *self.last_heartbeat.write().await = future_time;
+        tracing::debug!(
+            "Node {} recorded heartbeat with {}ms grace period",
+            self.node_id(),
+            grace_ms
+        );
+    }
+
     /// Force age the heartbeat to trigger immediate election
     /// Used when proactive health checks detect leader is dead
     pub async fn age_heartbeat_for_election(&self) {
