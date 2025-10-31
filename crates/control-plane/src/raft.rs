@@ -153,6 +153,18 @@ impl RaftNode {
         *self.last_heartbeat.write().await = SystemTime::now();
     }
 
+    /// Force age the heartbeat to trigger immediate election
+    /// Used when proactive health checks detect leader is dead
+    pub async fn age_heartbeat_for_election(&self) {
+        let elapsed = Duration::from_millis(self.election_timeout_ms + 100);
+        *self.last_heartbeat.write().await = SystemTime::now() - elapsed;
+        tracing::debug!(
+            "Node {} aged heartbeat by {}ms to force immediate election",
+            self.node_id(),
+            elapsed.as_millis()
+        );
+    }
+
     /// Check if election timeout has elapsed (for followers)
     pub async fn should_start_election(&self) -> bool {
         if self.is_leader().await {

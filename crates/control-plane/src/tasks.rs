@@ -27,20 +27,12 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                 continue;
             }
 
-            // **NEW**: Proactively probe the leader to detect if it's dead
+            // **PROACTIVE LEADER HEALTH CHECK**: Detect dead leaders faster
             // If we're a follower and we know who the leader is, try to reach it
-            // If we can't reach it several times in a row, force election early
+            // If we can't reach it several times in a row, force election by clearing heartbeat
             if !raft_node.is_leader().await {
                 if let Some(leader_id) = raft_node.get_current_leader().await {
-                    // Try to contact leader
-                    let req = RequestVoteRequest {
-                        term: raft_node.get_term().await,
-                        candidate_id: raft_node.node_id(),
-                        last_log_index: 0,
-                        last_log_term: 0,
-                    };
-
-                    // Try to reach leader to see if it's alive
+                    // Try to reach leader using simple healthz endpoint
                     let peers = raft_node.peers();
                     let leader_addr = peers.iter().find(|(id, _)| *id == leader_id).map(|(_, addr)| addr.clone());
                     
@@ -51,13 +43,14 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                             .ok();
                         
                         if let Some(client) = client {
-                            let url = format!("http://{}/raft/request-vote", leader_addr);
+                            // Use healthz endpoint instead of RequestVote (semantically correct)
+                            let url = format!("http://{}/healthz", leader_addr);
                             let probe_result = tokio::time::timeout(
                                 Duration::from_millis(150),
-                                client.post(&url).json(&req).send()
+                                client.get(&url).send()
                             ).await;
                             
-                            if probe_result.is_err() {
+                            if probe_result.is_err() || matches!(probe_result, Ok(Err(_))) {
                                 leader_probe_count += 1;
                                 tracing::debug!(
                                     "Node {} failed to reach leader {} (attempt {})",
@@ -66,15 +59,19 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                                     leader_probe_count
                                 );
                                 
-                                // If leader unreachable 3+ times in a row, trigger election immediately
+                                // If leader unreachable 3+ times in a row, FORCE election by aging the heartbeat
                                 if leader_probe_count >= 3 && last_election_attempt.elapsed() > Duration::from_millis(100) {
                                     tracing::warn!(
-                                        "Node {} detected leader {} is unreachable (3+ failed probes), triggering immediate election",
+                                        "Node {} detected leader {} is unreachable (3+ failed probes), forcing election NOW",
                                         raft_node.node_id(),
                                         leader_id
                                     );
+                                    
+                                    // CRITICAL FIX: Age the heartbeat so should_start_election() returns true
+                                    raft_node.age_heartbeat_for_election().await;
+                                    
                                     leader_probe_count = 0;
-                                    last_election_attempt = std::time::Instant::now() - Duration::from_millis(500); // Force next check to proceed
+                                    // Don't need to manipulate last_election_attempt - the aged heartbeat will trigger election
                                 }
                             } else {
                                 leader_probe_count = 0; // Reset counter if we can reach leader
