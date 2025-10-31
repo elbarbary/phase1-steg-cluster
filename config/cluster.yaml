@@ -9,7 +9,7 @@ nodes:
     http_port: 8082
     raft_port: 8082
   - id: "n3"
-    ip: "172.20.10.4"
+    ip: "172.20.10.6"
     http_port: 8083
     raft_port: 8083
 

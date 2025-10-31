@@ -135,12 +135,14 @@
                 <h2>Stress Testing</h2>
                 <div class="stress-controls">
                     <div class="form-group">
-                        <label for="num-clients">Number of Clients:</label>
-                        <input type="number" id="num-clients" value="20" min="1" max="1000">
+                        <label for="num-clients">Number of Concurrent Clients/Workers (max 500k total requests):</label>
+                        <input type="number" id="num-clients" value="20" min="1" max="500000">
+                        <small style="color: #666;">Each client = one concurrent worker sending requests to the Raft leader.</small>
                     </div>
                     <div class="form-group">
                         <label for="reqs-per-client">Requests per Client:</label>
-                        <input type="number" id="reqs-per-client" value="200" min="1" max="10000">
+                        <input type="number" id="reqs-per-client" value="200" min="1" max="100000">
+                        <small style="color: #666;">Each client makes this many requests sequentially.</small>
                     </div>
                     <div class="form-group">
                         <label for="operation">Operation:</label>

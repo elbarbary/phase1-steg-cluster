@@ -10,6 +10,7 @@ use common::ClusterConfig;
 use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -61,6 +62,12 @@ async fn main() -> Result<()> {
         // Static files
         .route("/", get(api::serve_index))
         .nest_service("/static", ServeDir::new("static"))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(Arc::new(state));
 
