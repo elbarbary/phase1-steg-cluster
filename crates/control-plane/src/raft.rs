@@ -49,18 +49,13 @@ impl RaftNode {
         tokio::fs::create_dir_all(&data_dir).await?;
         let storage = Arc::new(RaftStorage::new(&data_dir)?);
 
-        // Determine initial role: node 1 is leader, others are followers
-        let initial_role = if config.node_id == 1 {
-            NodeRole::Leader
-        } else {
-            NodeRole::Follower
-        };
-
-        let leader_id = if initial_role == NodeRole::Leader {
-            Some(config.node_id)
-        } else {
-            Some(1) // Node 1 is leader
-        };
+        // Determine initial role: start all nodes as followers and allow
+        // the cluster to elect a leader dynamically. Relying on a
+        // hardcoded leader (node 1) makes startup order-sensitive and
+        // can leave the cluster in a stale-leader state when nodes start
+        // at different times.
+        let initial_role = NodeRole::Follower;
+        let leader_id = None;
 
         let node_id = config.node_id;
         let election_timeout_ms = 50 + ((node_id * 30) % 50); // 50-100ms randomized (REDUCED for faster failover)
