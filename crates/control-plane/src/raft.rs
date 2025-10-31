@@ -63,7 +63,7 @@ impl RaftNode {
         };
 
         let node_id = config.node_id;
-        let election_timeout_ms = 150 + ((node_id * 100) % 150); // 150-300ms randomized
+        let election_timeout_ms = 50 + ((node_id * 30) % 50); // 50-100ms randomized (REDUCED for faster failover)
 
         Ok(Self {
             config,

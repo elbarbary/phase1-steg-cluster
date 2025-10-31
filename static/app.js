@@ -8,6 +8,7 @@ let recoveredImageData = null;
 // Charts
 let throughputChart = null;
 let latencyChart = null;
+let distributionChart = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -426,6 +427,39 @@ async function selectBestNode() {
     }
 }
 
+// Attempt a request with automatic retry on failure to handle failover
+async function requestWithFailover(nodeUrl, requestFn, maxRetries = 2) {
+    let lastError = null;
+    const availableNodes = [];
+    
+    try {
+        const { nodes } = await getClusterLeaderAndNodes();
+        for (const node of nodes) {
+            availableNodes.push(node.url);
+        }
+    } catch (e) {
+        // Ignore error getting nodes list
+    }
+    
+    // Remove duplicate nodeUrl
+    const uniqueNodes = [nodeUrl, ...availableNodes.filter(n => n !== nodeUrl)];
+    
+    for (let attempt = 0; attempt < uniqueNodes.length && attempt <= maxRetries; attempt++) {
+        const tryNode = uniqueNodes[attempt];
+        try {
+            return await requestFn(tryNode);
+        } catch (error) {
+            lastError = error;
+            // If leader seems down, refresh cluster state and try next node
+            if (attempt < uniqueNodes.length - 1) {
+                await new Promise(r => setTimeout(r, 50)); // Brief delay before retry
+            }
+        }
+    }
+    
+    throw lastError || new Error('All failover attempts exhausted');
+}
+
 // ============================================================================
 // Stress Testing
 // ============================================================================
@@ -554,20 +588,27 @@ async function stressWorker(numRequests, operation) {
             selectedNode = await selectBestNode();
             const datasetIdx = Math.floor(Math.random() * 50);
             
-            // Fetch dataset image
-            const imgResponse = await fetch(`${selectedNode}/api/dataset/${datasetIdx}`);
-            if (!imgResponse.ok) {
-                throw new Error(`Dataset fetch failed: ${imgResponse.status}`);
-            }
-            const imgBlob = await imgResponse.blob();
+            // Fetch dataset image with failover
+            const imgBlob = await requestWithFailover(selectedNode, async (node) => {
+                const imgResponse = await fetch(`${node}/api/dataset/${datasetIdx}`, {
+                    timeout: 5000
+                });
+                if (!imgResponse.ok) {
+                    throw new Error(`Dataset fetch failed: ${imgResponse.status}`);
+                }
+                return await imgResponse.blob();
+            });
+            
             const imgFile = new File([imgBlob], 'test.png', { type: 'image/png' });
             
-            // Perform operation
-            if (operation === 'embed') {
-                await embedSecret(selectedNode, imgFile);
-            } else {
-                await extractSecret(selectedNode, imgFile);
-            }
+            // Perform operation with failover
+            await requestWithFailover(selectedNode, async (node) => {
+                if (operation === 'embed') {
+                    await embedSecret(node, imgFile);
+                } else {
+                    await extractSecret(node, imgFile);
+                }
+            });
             
             success = true;
         } catch (error) {
@@ -620,6 +661,9 @@ function updateStressUI() {
     
     // Update charts
     updateCharts(throughput, test.latencyReservoir);
+    
+    // Update distribution chart
+    updateDistributionChart(test.nodeDistribution, elapsed);
 }
 
 // ============================================================================
@@ -676,6 +720,48 @@ function initCharts() {
             }
         }
     });
+    
+    const distributionCtx = document.getElementById('distribution-chart').getContext('2d');
+    distributionChart = new Chart(distributionCtx, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Requests/s per Server',
+                data: [],
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.7)',
+                    'rgba(54, 162, 235, 0.7)',
+                    'rgba(75, 192, 192, 0.7)'
+                ],
+                borderColor: [
+                    'rgb(255, 99, 132)',
+                    'rgb(54, 162, 235)',
+                    'rgb(75, 192, 192)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { 
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Requests/s'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Request Distribution Across Servers'
+                }
+            }
+        }
+    });
 }
 
 function resetCharts() {
@@ -687,6 +773,10 @@ function resetCharts() {
     latencyChart.data.datasets[0].data = [];
     latencyChart.data.datasets[1].data = [];
     latencyChart.update();
+    
+    distributionChart.data.labels = [];
+    distributionChart.data.datasets[0].data = [];
+    distributionChart.update();
 }
 
 function updateCharts(throughput, latencies) {
@@ -721,6 +811,34 @@ function updateCharts(throughput, latencies) {
         
         latencyChart.update('none');
     }
+}
+
+function updateDistributionChart(nodeDistribution, elapsedSeconds) {
+    if (!nodeDistribution || Object.keys(nodeDistribution).length === 0) {
+        return;
+    }
+    
+    // Calculate req/s for each node
+    const labels = [];
+    const data = [];
+    
+    for (const [nodeUrl, count] of Object.entries(nodeDistribution)) {
+        // Extract node identifier (e.g., "n1", "n2", "n3" or port number)
+        let nodeLabel = nodeUrl;
+        const match = nodeUrl.match(/172\.20\.10\.(\d+):(\d+)/);
+        if (match) {
+            const port = match[2];
+            const portMap = { '8081': 'n1', '8082': 'n2', '8083': 'n3' };
+            nodeLabel = portMap[port] || `Port ${port}`;
+        }
+        
+        labels.push(nodeLabel);
+        data.push((count / elapsedSeconds).toFixed(2));
+    }
+    
+    distributionChart.data.labels = labels;
+    distributionChart.data.datasets[0].data = data;
+    distributionChart.update('none');
 }
 
 // ============================================================================
