@@ -13,6 +13,10 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
     tokio::spawn(async move {
         let check_interval = Duration::from_millis(50); // Check every 50ms
         let mut interval = time::interval(check_interval);
+        let mut last_election_attempt = std::time::Instant::now();
+        let min_election_interval = Duration::from_millis(300); // Wait at least 300ms between election attempts
+        let startup_time = std::time::Instant::now();
+        let single_node_grace_period = Duration::from_secs(5); // After 5s, a single node becomes leader even without quorum
 
         loop {
             interval.tick().await;
@@ -24,6 +28,14 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
 
             // Check if we should start election
             if raft_node.should_start_election().await {
+                // Add backoff: don't attempt elections too frequently
+                // (prevents election storms when isolated single node)
+                if last_election_attempt.elapsed() < min_election_interval {
+                    continue;
+                }
+
+                last_election_attempt = std::time::Instant::now();
+
                 // Start election
                 let new_term = raft_node.start_election().await;
 
@@ -44,6 +56,7 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                 let results = network.broadcast_request_vote(req).await;
 
                 // Count votes
+                let mut received_vote_count = 1; // Self vote
                 for (peer_id, result) in results {
                     match result {
                         Ok(resp) => {
@@ -54,6 +67,8 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                                     peer_id,
                                     new_term
                                 );
+
+                                received_vote_count += 1;
 
                                 // Record vote and check for majority
                                 if raft_node.record_vote(peer_id).await {
@@ -89,11 +104,27 @@ pub fn start_election_monitor(raft_node: Arc<RaftNode>, network: Arc<RaftNetwork
                     }
                 }
 
-                // If we didn't win, continue monitoring (may retry in next term)
-                tracing::info!(
-                    "Node {} did not win election for term {}, continuing as candidate",
+                // If single node and grace period has passed, become leader anyway
+                // This allows a solo node to serve requests while waiting for cluster to form
+                if received_vote_count == 1 && startup_time.elapsed() > single_node_grace_period {
+                    tracing::warn!(
+                        "Node {} is isolated (no peers responding) and grace period passed. Becoming LEADER anyway for term {}",
+                        raft_node.node_id(),
+                        new_term
+                    );
+                    raft_node.set_leader().await;
+                    start_heartbeat_sender(raft_node.clone(), network.clone());
+                    return; // Exit election monitor
+                }
+
+                // If we didn't win, log and wait for next timeout
+                // (don't immediately retry — that causes election storms)
+                tracing::debug!(
+                    "Node {} did not win election for term {} ({}/{} votes), waiting for next timeout",
                     raft_node.node_id(),
-                    new_term
+                    new_term,
+                    received_vote_count,
+                    1 + raft_node.peers().len()
                 );
             }
         }

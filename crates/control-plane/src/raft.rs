@@ -225,6 +225,13 @@ impl RaftNode {
                 votes.len(),
                 total_nodes
             );
+        } else {
+            tracing::debug!(
+                "Node {} received vote (now {}/{})",
+                self.config.node_id,
+                votes.len(),
+                total_nodes
+            );
         }
 
         has_majority
