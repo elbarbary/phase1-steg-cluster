@@ -429,7 +429,19 @@ pub async fn raft_append_entries_handler(
     // If request is from leader, update leader and role
     if req.term >= state.raft_node.get_term().await {
         state.raft_node.set_current_leader(Some(req.leader_id)).await;
-        if !state.raft_node.is_leader().await {
+        
+        // If we're currently leader but received AppendEntries from another leader
+        // with same or higher term, we must step down (only one leader per term)
+        let our_node_id = state.raft_node.node_id();
+        if state.raft_node.is_leader().await && req.leader_id != our_node_id {
+            tracing::warn!(
+                "Node {} stepping down: received AppendEntries from {} in term {}",
+                state.node_id,
+                req.leader_id,
+                req.term
+            );
+            state.raft_node.set_follower().await;
+        } else if !state.raft_node.is_leader().await {
             state.raft_node.set_follower().await;
         }
         
