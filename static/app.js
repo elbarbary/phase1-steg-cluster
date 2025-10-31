@@ -219,14 +219,13 @@ async function updateClusterStatus() {
 }
 
 async function discoverNodes() {
-    // Try default local nodes
+    // Try cluster nodes - use actual IPs from config
+    // This gets called from browser, so use real cluster IPs
     const defaultNodes = [
-        'http://127.0.0.1:8081',
-        'http://127.0.0.1:8082',
-        'http://127.0.0.1:8083',
-        'http://10.0.0.11:8081',
-        'http://10.0.0.12:8082',
-        'http://10.0.0.13:8083',
+        'http://172.20.10.2:8081',  // n1
+        'http://172.20.10.3:8082',  // n2
+        'http://172.20.10.6:8083',  // n3
+        'http://127.0.0.1:8081',    // localhost (if running locally)
     ];
     
     const available = [];
