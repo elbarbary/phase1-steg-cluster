@@ -280,6 +280,11 @@ impl RaftNode {
 
         if can_vote && candidate_term >= current_term {
             *voted_for = Some(candidate_id);
+            
+            // CRITICAL: Reset heartbeat when granting vote
+            // This prevents immediate election after voting (election storm prevention)
+            self.record_heartbeat().await;
+            
             tracing::info!(
                 "Node {} granted vote to {} for term {}",
                 self.config.node_id,
